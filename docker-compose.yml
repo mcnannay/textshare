@@ -1,0 +1,12 @@
+services:
+  textshare:
+    build: .
+    ports:
+      - "8080:3000"
+    environment:
+      - NODE_ENV=production
+    # uncomment to persist container logs only (pads are in-memory by design)
+    # volumes:
+    #   - textshare_logs:/var/log
+# volumes:
+#   textshare_logs:
