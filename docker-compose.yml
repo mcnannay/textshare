@@ -1,16 +1,7 @@
 services:
   textshare:
     build: .
+    ports:
+      - "8082:3000"
     environment:
       - NODE_ENV=production
-    ports:
-      - "8082:3000"  # optional: keep if you want direct access via host IP and port
-    networks:
-      - proxy
-      - textshare_default
-
-networks:
-  proxy:
-    external: true
-  textshare_default:
-    external: true
