@@ -1,26 +1,41 @@
 <!doctype html>
-<html>
+<html data-theme="">
 <head>
   <meta charset="utf-8" />
   <title>TextShare</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    :root { --border:#ddd; --muted:#666; }
-    html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; }
+    :root{
+      --bg:#ffffff; --fg:#111; --border:#ddd; --muted:#666; --tab:#f7f7f7;
+    }
+    /* Dark theme variables */
+    :root[data-theme="dark"]{
+      --bg:#0f1216; --fg:#e6e6e6; --border:#273042; --muted:#9aa4b2; --tab:#151a21;
+    }
+    /* Auto-detect if user hasn't chosen yet */
+    @media (prefers-color-scheme: dark){
+      :root:not([data-theme="light"]){
+        --bg:#0f1216; --fg:#e6e6e6; --border:#273042; --muted:#9aa4b2; --tab:#151a21;
+      }
+    }
+
+    html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--fg); }
     .wrap { display: flex; flex-direction: column; height: 100%; }
     header { padding: 10px; border-bottom: 1px solid var(--border); display:flex; align-items:center; gap:12px; }
     .tabs { display:flex; gap:6px; flex-wrap: wrap; }
     .tab {
       padding:6px 10px; border:1px solid var(--border); border-bottom:none;
-      border-radius:10px 10px 0 0; cursor:pointer; background:#f7f7f7; user-select:none;
+      border-radius:10px 10px 0 0; cursor:pointer; background:var(--tab); user-select:none;
     }
-    .tab.active { background:#fff; font-weight:600; }
+    .tab.active { background:var(--bg); font-weight:600; }
     .grow { flex:1 }
     .actions { display:flex; gap:8px; }
-    button { padding:6px 10px; border:1px solid var(--border); border-radius:8px; background:#fff; cursor:pointer; }
+    button {
+      padding:6px 10px; border:1px solid var(--border); border-radius:8px; background:transparent; color:var(--fg); cursor:pointer;
+    }
     button:active { transform: translateY(1px); }
     textarea {
-      flex: 1; width: 100%; resize: none; border: 0; outline: none;
+      flex: 1; width: 100%; resize: none; border: 0; outline: none; background: var(--bg); color: var(--fg);
       padding: 14px; font: 16px/1.4 monospace; box-sizing: border-box;
     }
     .pad-wrap { display:flex; flex-direction:column; height:100%; border-top:1px solid var(--border); }
@@ -34,6 +49,7 @@
       <div class="tabs" id="tabs"></div>
       <div class="grow"></div>
       <div class="actions">
+        <button id="themeBtn" title="Toggle dark mode">🌓</button>
         <button id="addPadBtn" title="Add pad">+ Pad</button>
         <button id="renamePadBtn" title="Rename current pad">Rename</button>
         <button id="copyBtn" title="Copy current pad">Copy</button>
@@ -51,6 +67,20 @@
 
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script>
+    // --- Dark mode: load saved preference
+    const root = document.documentElement;
+    const savedTheme = localStorage.getItem('ts_theme'); // 'dark' | 'light' | null
+    if (savedTheme) root.setAttribute('data-theme', savedTheme);
+
+    const themeBtn = document.getElementById('themeBtn');
+    themeBtn.onclick = () => {
+      const current = root.getAttribute('data-theme');
+      const next = current === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+      localStorage.setItem('ts_theme', next);
+    };
+    // --- End dark mode
+
     const socket = io();
     const padEl = document.getElementById('pad');
     const tabsEl = document.getElementById('tabs');
@@ -129,8 +159,7 @@
       if (quiet || !currentId) return;
       clearTimeout(debounce);
       const text = padEl.value;
-      // local reflect
-      pads[currentId].text = text;
+      pads[currentId].text = text; // local reflect
       debounce = setTimeout(() => socket.emit('updateText', { id: currentId, text }), 100);
     });
 
@@ -157,7 +186,6 @@
       socket.emit('clearPad', currentId);
     };
 
-    // In case we reconnect, ask for fresh state
     socket.io.on('reconnect', () => socket.emit('requestState'));
   </script>
 </body>
