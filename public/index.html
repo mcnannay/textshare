@@ -30,6 +30,9 @@
     button {
       padding:6px 10px; border:1px solid var(--border); border-radius:8px; background:transparent; color:var(--fg); cursor:pointer;
     }
+    button:hover {
+      background: var(--tab);
+    }
     button:active { transform: translateY(1px); }
     textarea {
       flex: 1; width: 100%; resize: none; border: 0; outline: none; background: var(--bg); color: var(--fg);
@@ -46,7 +49,7 @@
       <div class="tabs" id="tabs"></div>
       <div class="grow"></div>
       <div class="actions">
-        <button id="themeBtn" title="Toggle dark mode">🌓</button>
+        <button id="themeBtn" title="Toggle dark mode">🌓 Dark</button>
         <button id="addPadBtn" title="Add pad">+ Pad</button>
         <button id="renamePadBtn" title="Rename current pad">Rename</button>
         <button id="copyBtn" title="Copy current pad">Copy</button>
@@ -56,16 +59,20 @@
     <div class="pad-wrap">
       <textarea id="pad" placeholder="Start typing…"></textarea>
       <div style="padding:6px 10px;">
-        <span class="hint">Polling-based: updates every 1s. No login, no WebSockets.</span>
+        <span class="hint">Polling every 1s. No login. No WebSockets. Instant updates across browsers.</span>
       </div>
     </div>
   </div>
+
   <script>
+    // Dark mode toggle + preference saving
     const root = document.documentElement;
     const savedTheme = localStorage.getItem('ts_theme');
     if (savedTheme) root.setAttribute('data-theme', savedTheme);
-    document.getElementById('themeBtn').onclick = () => {
-      const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    const themeBtn = document.getElementById('themeBtn');
+    themeBtn.onclick = () => {
+      const current = root.getAttribute('data-theme');
+      const next = current === 'dark' ? 'light' : 'dark';
       root.setAttribute('data-theme', next);
       localStorage.setItem('ts_theme', next);
     };
