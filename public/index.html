@@ -2,23 +2,20 @@
 <html data-theme="">
 <head>
   <meta charset="utf-8" />
-  <title>TextShare</title>
+  <title>TextShare (Polling)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root{
       --bg:#ffffff; --fg:#111; --border:#ddd; --muted:#666; --tab:#f7f7f7;
     }
-    /* Dark theme variables */
     :root[data-theme="dark"]{
       --bg:#0f1216; --fg:#e6e6e6; --border:#273042; --muted:#9aa4b2; --tab:#151a21;
     }
-    /* Auto-detect if user hasn't chosen yet */
     @media (prefers-color-scheme: dark){
       :root:not([data-theme="light"]){
         --bg:#0f1216; --fg:#e6e6e6; --border:#273042; --muted:#9aa4b2; --tab:#151a21;
       }
     }
-
     html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--fg); }
     .wrap { display: flex; flex-direction: column; height: 100%; }
     header { padding: 10px; border-bottom: 1px solid var(--border); display:flex; align-items:center; gap:12px; }
@@ -56,32 +53,23 @@
         <button id="clearBtn" title="Clear current pad">Clear</button>
       </div>
     </header>
-
     <div class="pad-wrap">
       <textarea id="pad" placeholder="Start typing…"></textarea>
       <div style="padding:6px 10px;">
-        <span class="hint">Edits are live to everyone on this page. No login, no history.</span>
+        <span class="hint">Polling-based: updates every 1s. No login, no WebSockets.</span>
       </div>
     </div>
   </div>
-
-  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script>
-    // --- Dark mode: load saved preference
     const root = document.documentElement;
-    const savedTheme = localStorage.getItem('ts_theme'); // 'dark' | 'light' | null
+    const savedTheme = localStorage.getItem('ts_theme');
     if (savedTheme) root.setAttribute('data-theme', savedTheme);
-
-    const themeBtn = document.getElementById('themeBtn');
-    themeBtn.onclick = () => {
-      const current = root.getAttribute('data-theme');
-      const next = current === 'dark' ? 'light' : 'dark';
+    document.getElementById('themeBtn').onclick = () => {
+      const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
       root.setAttribute('data-theme', next);
       localStorage.setItem('ts_theme', next);
     };
-    // --- End dark mode
 
-    const socket = io();
     const padEl = document.getElementById('pad');
     const tabsEl = document.getElementById('tabs');
     const addPadBtn = document.getElementById('addPadBtn');
@@ -89,86 +77,95 @@
     const copyBtn = document.getElementById('copyBtn');
     const clearBtn = document.getElementById('clearBtn');
 
-    let pads = {};           // id -> {id,title,text}
+    let pads = {};
     let currentId = null;
+    let polling = null;
     let quiet = false;
-    let debounce;
+
+    function fetchPads(selectId = null) {
+      fetch('/pads').then(res => res.json()).then(data => {
+        pads = Object.fromEntries(data.map(p => [p.id, p]));
+        renderTabs(selectId || currentId);
+      });
+    }
 
     function renderTabs(selectId) {
       tabsEl.innerHTML = '';
       Object.values(pads).forEach(p => {
         const t = document.createElement('div');
-        t.className = 'tab' + (p.id === currentId ? ' active':'' );
+        t.className = 'tab' + (p.id === currentId ? ' active' : '');
         t.textContent = p.title;
         t.onclick = () => switchPad(p.id);
-        t.ondblclick = () => doRename(p.id);
+        t.ondblclick = () => renamePad(p.id);
         tabsEl.appendChild(t);
       });
-      if (selectId && pads[selectId]) currentId = selectId;
-      if (!currentId) currentId = Object.keys(pads)[0];
-      padEl.value = (pads[currentId]?.text) || '';
-      highlightActive();
-    }
-
-    function highlightActive() {
-      [...tabsEl.children].forEach((c, i) => {
-        const id = Object.keys(pads)[i];
-        c.classList.toggle('active', id === currentId);
-      });
+      currentId = selectId || Object.keys(pads)[0];
+      loadPad(currentId);
     }
 
     function switchPad(id) {
       if (!pads[id]) return;
       currentId = id;
-      padEl.value = pads[id].text || '';
-      highlightActive();
+      loadPad(id);
     }
 
-    function doRename(id) {
-      const cur = pads[id];
-      const name = prompt('New pad name:', cur?.title || '');
-      if (!name) return;
-      socket.emit('renamePad', { id, title: name });
+    function loadPad(id) {
+      stopPolling();
+      fetch('/pad/' + id).then(res => res.json()).then(data => {
+        padEl.value = data.text;
+        startPolling(id);
+      });
     }
 
-    // Socket events
-    socket.on('init', ({ pads: list }) => {
-      pads = Object.fromEntries(list.map(p => [p.id, p]));
-      renderTabs(currentId);
-    });
+    function startPolling(id) {
+      polling = setInterval(() => {
+        fetch('/pad/' + id).then(res => res.json()).then(data => {
+          if (!quiet && data.text !== padEl.value) {
+            quiet = true;
+            const s = padEl.selectionStart, e = padEl.selectionEnd;
+            padEl.value = data.text;
+            padEl.setSelectionRange(s, e);
+            quiet = false;
+          }
+        });
+      }, 1000);
+    }
 
-    socket.on('padsChanged', ({ pads: list, created }) => {
-      pads = Object.fromEntries(list.map(p => [p.id, p]));
-      renderTabs(created || currentId);
-    });
+    function stopPolling() {
+      if (polling) clearInterval(polling);
+    }
 
-    socket.on('textUpdated', ({ id, text }) => {
-      if (!pads[id]) return;
-      pads[id].text = text;
-      if (id === currentId) {
-        quiet = true;
-        const s = padEl.selectionStart, e = padEl.selectionEnd;
-        padEl.value = text;
-        try { padEl.setSelectionRange(s, e); } catch {}
-        quiet = false;
+    padEl.addEventListener('input', () => {
+      if (!quiet && currentId) {
+        fetch('/pad/' + currentId, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: padEl.value })
+        });
       }
     });
 
-    // UI events
-    padEl.addEventListener('input', () => {
-      if (quiet || !currentId) return;
-      clearTimeout(debounce);
-      const text = padEl.value;
-      pads[currentId].text = text; // local reflect
-      debounce = setTimeout(() => socket.emit('updateText', { id: currentId, text }), 100);
-    });
-
     addPadBtn.onclick = () => {
-      const name = prompt('Pad name:', `Pad ${Object.keys(pads).length + 1}`) || 'New Pad';
-      socket.emit('createPad', name);
+      const name = prompt("Pad name:", "Pad " + (Object.keys(pads).length + 1)) || "New Pad";
+      fetch('/pad', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: name })
+      }).then(res => res.json()).then(data => {
+        fetchPads(data.id);
+      });
     };
 
-    renamePadBtn.onclick = () => currentId && doRename(currentId);
+    function renamePad(id) {
+      const name = prompt("New name:", pads[id]?.title || "") || "";
+      fetch('/pad/' + id + '/rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: name })
+      }).then(() => fetchPads());
+    }
+
+    renamePadBtn.onclick = () => currentId && renamePad(currentId);
 
     copyBtn.onclick = async () => {
       try {
@@ -176,17 +173,20 @@
         copyBtn.textContent = 'Copied!';
         setTimeout(() => copyBtn.textContent = 'Copy', 800);
       } catch {
-        alert('Could not copy to clipboard.');
+        alert("Clipboard copy failed");
       }
     };
 
     clearBtn.onclick = () => {
       if (!currentId) return;
-      if (!confirm('Clear this pad for everyone?')) return;
-      socket.emit('clearPad', currentId);
+      if (confirm("Clear this pad for everyone?")) {
+        fetch('/pad/' + currentId + '/clear', { method: 'POST' }).then(() => {
+          padEl.value = "";
+        });
+      }
     };
 
-    socket.io.on('reconnect', () => socket.emit('requestState'));
+    fetchPads();
   </script>
 </body>
 </html>
