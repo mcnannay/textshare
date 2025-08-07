@@ -1,7 +1,11 @@
+version: "3.8"
+
 services:
   textshare:
+    container_name: textshare
     build: .
     ports:
       - "8082:3000"
     environment:
       - NODE_ENV=production
+    restart: unless-stopped
