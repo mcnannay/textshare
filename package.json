@@ -2,15 +2,13 @@
   "name": "textshare",
   "version": "1.0.0",
   "private": true,
-  "description": "Ultra-simple realtime multi-pad text board (no auth)",
-  "main": "server.js",
+  "description": "Simple multi-pad real-time text sharing via polling (no WebSockets)",
   "type": "module",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.19.2",
-    "socket.io": "^4.7.5",
     "xss": "^1.0.15"
   }
 }
